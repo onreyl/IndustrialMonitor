@@ -1,0 +1,54 @@
+<UserControl x:Class="IndustrialMonitor.Views.FooterView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             DataContext="{Binding StatusBarViewModel, Source={StaticResource Locator}}"
+             d:DesignHeight="35" d:DesignWidth="1100">
+
+    <Border Background="#FF1A237E" BorderBrush="#FF3949AB" BorderThickness="0,2,0,0">
+        <Grid Margin="15,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Alarm Status -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse Width="10" Height="10" Fill="#FF4CAF50" Margin="0,0,8,0"/>
+                <TextBlock Text="NO ACTIVE ALARMS" Foreground="#FFA5D6A7" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+            </StackPanel>
+            
+            <!-- Connection Status (Center) -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="{Binding ConnectionStatus}" Foreground="#FFFFC107" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                <Button Content="Connect PLC" Command="{Binding ConnectCommand}" 
+                        Margin="15,0,5,0" Padding="8,2" FontSize="9" 
+                        Background="#FF2E7D32" Foreground="White" BorderThickness="0"/>
+                <Button Content="Disconnect" Command="{Binding DisconnectCommand}" 
+                        Padding="8,2" FontSize="9"
+                        Background="#FFC62828" Foreground="White" BorderThickness="0"/>
+            </StackPanel>
+            
+            <!-- Mode Indicator -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <TextBlock Text="MODE:" Foreground="#FF90A4AE" FontSize="10" Margin="0,0,5,0"/>
+                <TextBlock Foreground="#FF4CAF50" FontSize="10" FontWeight="Bold">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="PLC"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSimulationMode}" Value="True">
+                                    <Setter Property="Text" Value="SIMULATION"/>
+                                    <Setter Property="Foreground" Value="#FFFFC107"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>
