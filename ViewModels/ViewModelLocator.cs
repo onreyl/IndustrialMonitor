@@ -1,57 +1,47 @@
+using Microsoft.Extensions.DependencyInjection;
+using S7.Net;
 using IndustrialMonitor.Services;
+using System;
 
 namespace IndustrialMonitor.ViewModels
 {
     /// <summary>
-    /// Simple service locator / DI container.
-    /// In a larger application, use a proper DI framework like:
-    /// - Microsoft.Extensions.DependencyInjection
-    /// - Autofac
-    /// - Unity
+    /// Responsible for locating and providing ViewModel instances across the application.
+    /// Initializes the dependency injection container and registers shared services and ViewModels.
     /// </summary>
     public class ViewModelLocator
     {
-        private static ViewModelLocator? _instance;
-        public static ViewModelLocator Instance => _instance ??= new ViewModelLocator();
-
-        // Services (singletons)
-        private readonly IPlcService _plcService;
-        private readonly DataService _dataService;
-
-        // ViewModels
-        private MainViewModel? _mainViewModel;
-        private ControlPanelViewModel? _controlPanelViewModel;
-        private ProcessOverviewViewModel? _processOverviewViewModel;
-        private StatusBarViewModel? _statusBarViewModel;
+        private readonly IServiceProvider _serviceProvider;
 
         public ViewModelLocator()
         {
-            // Register services
-            _plcService = new PlcService();
-            _dataService = new DataService(_plcService);
-            _dataService.Start();
+            var services = new ServiceCollection();
+
+            // Register PlcService
+            // In a production environment, configuration should be loaded from appsettings.json
+            services.AddSingleton<PlcService>(sp => new PlcService(CpuType.S71200, "127.0.0.1", 0, 1, true));
+
+            // Register ViewModels
+            services.AddSingleton<MainViewModel>();
+            services.AddSingleton<ControlPanelViewModel>();
+            services.AddSingleton<StatusBarViewModel>();
+
+            _serviceProvider = services.BuildServiceProvider();
         }
 
-        // Service accessors
-        public IPlcService PlcService => _plcService;
-        public DataService DataService => _dataService;
+        public MainViewModel Main => _serviceProvider.GetRequiredService<MainViewModel>();
+        public ControlPanelViewModel ControlPanelViewModel => _serviceProvider.GetRequiredService<ControlPanelViewModel>();
+        public StatusBarViewModel StatusBarViewModel => _serviceProvider.GetRequiredService<StatusBarViewModel>();
 
-        // ViewModel accessors (lazy initialization)
-        public MainViewModel MainViewModel =>
-            _mainViewModel ??= new MainViewModel(_dataService);
-
-        public ControlPanelViewModel ControlPanelViewModel =>
-            _controlPanelViewModel ??= new ControlPanelViewModel(_dataService);
-
-        public ProcessOverviewViewModel ProcessOverviewViewModel =>
-            _processOverviewViewModel ??= new ProcessOverviewViewModel(_dataService);
-
-        public StatusBarViewModel StatusBarViewModel =>
-            _statusBarViewModel ??= new StatusBarViewModel(_dataService);
-
+        /// <summary>
+        /// Cleans up resources by disposing the service provider if applicable.
+        /// </summary>
         public void Cleanup()
         {
-            _dataService.Dispose();
+            if (_serviceProvider is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 }

@@ -1,121 +1,82 @@
-using System.Windows.Input;
-using System.Windows.Media;
-using IndustrialMonitor.Core;
 using IndustrialMonitor.Models;
 using IndustrialMonitor.Services;
+using System;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Threading.Tasks;
 
 namespace IndustrialMonitor.ViewModels
 {
     /// <summary>
-    /// ViewModel for the Control Panel view.
-    /// Handles operator controls and displays process values.
+    /// ViewModel for the control panel, handling manual process control and status display.
     /// </summary>
-    public class ControlPanelViewModel : ObservableObject
+    public class ControlPanelViewModel : BaseViewModel
     {
-        private readonly DataService _dataService;
-
-        #region Properties
-
-        private bool _isSystemRunning;
-        public bool IsSystemRunning
-        {
-            get => _isSystemRunning;
-            set
-            {
-                if (SetProperty(ref _isSystemRunning, value))
-                {
-                    OnPropertyChanged(nameof(SystemStatusText));
-                    OnPropertyChanged(nameof(SystemStatusColor));
-                    ((RelayCommand)StartCommand).RaiseCanExecuteChanged();
-                    ((RelayCommand)StopCommand).RaiseCanExecuteChanged();
-                }
-            }
-        }
-
-        public string SystemStatusText => IsSystemRunning ? "RUNNING" : "STOPPED";
-        public Brush SystemStatusColor => IsSystemRunning ? Brushes.LimeGreen : Brushes.Red;
-
+        private readonly PlcService _plcService;
         private double _tankLevel;
-        public double TankLevel
-        {
-            get => _tankLevel;
-            set => SetProperty(ref _tankLevel, value);
-        }
-
         private double _temperature;
-        public double Temperature
-        {
-            get => _temperature;
-            set => SetProperty(ref _temperature, value);
-        }
-
         private double _pressure;
-        public double Pressure
-        {
-            get => _pressure;
-            set => SetProperty(ref _pressure, value);
-        }
-
         private int _motorSpeed;
-        public int MotorSpeed
+        private string _systemStatusText = "SYSTEM READY";
+        private Brush _systemStatusColor = Brushes.Orange;
+
+        public ControlPanelViewModel(PlcService plcService)
         {
-            get => _motorSpeed;
-            set => SetProperty(ref _motorSpeed, value);
+            _plcService = plcService;
+            StartCommand = new RelayCommand(async _ => await StartProcess());
+            StopCommand = new RelayCommand(async _ => await StopProcess());
         }
-
-        #endregion
-
-        #region Commands
 
         public ICommand StartCommand { get; }
         public ICommand StopCommand { get; }
 
-        #endregion
+        public double TankLevel { get => _tankLevel; set => SetProperty(ref _tankLevel, value); }
+        public double Temperature { get => _temperature; set => SetProperty(ref _temperature, value); }
+        public double Pressure { get => _pressure; set => SetProperty(ref _pressure, value); }
+        public int MotorSpeed { get => _motorSpeed; set => SetProperty(ref _motorSpeed, value); }
+        public string SystemStatusText { get => _systemStatusText; set => SetProperty(ref _systemStatusText, value); }
+        public Brush SystemStatusColor { get => _systemStatusColor; set => SetProperty(ref _systemStatusColor, value); }
 
-        public ControlPanelViewModel(DataService dataService)
+        private async Task StartProcess()
         {
-            _dataService = dataService;
-
-            StartCommand = new RelayCommand(OnStart, _ => !IsSystemRunning);
-            StopCommand = new RelayCommand(OnStop, _ => IsSystemRunning);
-
-            // Subscribe to data updates
-            _dataService.DataUpdated += OnDataUpdated;
-
-            // Initialize with current data
-            UpdateFromProcessData(_dataService.CurrentData);
+            await _plcService.StartProcessAsync();
+            UpdateStatusUI(true);
         }
 
-        private void OnStart(object? parameter)
+        private async Task StopProcess()
         {
-            IsSystemRunning = true;
-            _dataService.SetSystemRunning(true);
-
-            // Notify other ViewModels
-            Messenger.Default.Send(new SystemStateChangedMessage(true));
+            await _plcService.StopProcessAsync();
+            UpdateStatusUI(false);
         }
 
-        private void OnStop(object? parameter)
+        private void UpdateStatusUI(bool isRunning)
         {
-            IsSystemRunning = false;
-            _dataService.SetSystemRunning(false);
-
-            // Notify other ViewModels
-            Messenger.Default.Send(new SystemStateChangedMessage(false));
+            if (isRunning)
+            {
+                SystemStatusText = "RUNNING";
+                SystemStatusColor = Brushes.LightGreen;
+            }
+            else
+            {
+                SystemStatusText = "STOPPED";
+                SystemStatusColor = Brushes.IndianRed;
+            }
         }
 
-        private void OnDataUpdated(object? sender, ProcessData data)
+        /// <summary>
+        /// Updates the view model properties based on the latest machine status.
+        /// </summary>
+        /// <param name="status">The latest status from the PLC.</param>
+        public void UpdateFromStatus(MachineStatus status)
         {
-            UpdateFromProcessData(data);
-        }
+            Temperature = status.Temperature;
+            Pressure = status.Pressure;
 
-        private void UpdateFromProcessData(ProcessData data)
-        {
-            TankLevel = data.TankLevel;
-            Temperature = data.Temperature;
-            Pressure = data.Pressure;
-            MotorSpeed = data.MotorSpeed;
-            IsSystemRunning = data.IsSystemRunning;
+            // Simulate extra sensor data for the UI
+            TankLevel = status.IsRunning ? 45 + new Random().NextDouble() * 10 : 10;
+            MotorSpeed = status.IsRunning ? 1450 + new Random().Next(0, 100) : 0;
+
+            UpdateStatusUI(status.IsRunning);
         }
     }
 }

@@ -1,138 +1,166 @@
-using System;
-using S7.Net;
 using IndustrialMonitor.Models;
+using S7.Net;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System;
 
 namespace IndustrialMonitor.Services
 {
     /// <summary>
-    /// Service for managing Siemens S7 PLC connections.
-    /// Implements IPlcService for dependency injection.
-    /// Falls back to simulation mode if PLC is not available.
+    /// Manages communication with the Siemens S7 PLC using the S7.Net library.
+    /// Supports both real hardware connection and a simulation mode for development.
     /// </summary>
     public class PlcService : IPlcService
     {
-        private Plc? _plc;
-        private bool _isSimulationMode = true;
-        private string _connectionStatus = "Disconnected";
+        private Plc _plc;
+        private readonly bool _isSimulation;
+        private readonly Random _random = new Random();
+        private bool _isProcessRunning = false;
 
-        // PLC Configuration
-        public string IpAddress { get; set; } = "192.168.0.1";
-        public CpuType CpuType { get; set; } = CpuType.S71500;
-        public short Rack { get; set; } = 0;
-        public short Slot { get; set; } = 1;
-
-        // Data Block Configuration
-        public int DataBlock { get; set; } = 1;
-
-        // Tag Offsets
-        public int TankLevelOffset { get; set; } = 0;
-        public int TemperatureOffset { get; set; } = 4;
-        public int PressureOffset { get; set; } = 8;
-        public int MotorSpeedOffset { get; set; } = 12;
-        public int SystemRunningOffset { get; set; } = 16;
-
-        // Interface Properties
-        public bool IsConnected => _plc?.IsConnected ?? false;
-        public bool IsSimulationMode => _isSimulationMode;
-        public string ConnectionStatus => _connectionStatus;
-
-        // Events
-        public event EventHandler<string>? ConnectionStatusChanged;
-        public event EventHandler<ProcessData>? DataReceived;
-
-        public bool Connect()
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PlcService"/> class.
+        /// </summary>
+        /// <param name="cpu">The CPU type of the PLC.</param>
+        /// <param name="ip">The IP address of the PLC.</param>
+        /// <param name="rack">The rack number.</param>
+        /// <param name="slot">The slot number.</param>
+        /// <param name="isSimulation">If set to <c>true</c>, runs in simulation mode without attempting actual PLC connection.</param>
+        public PlcService(CpuType cpu, string ip, short rack, short slot, bool isSimulation = false)
         {
+            _isSimulation = isSimulation;
+            
+            if (!_isSimulation)
+            {
+                _plc = new Plc(cpu, ip, rack, slot);
+            }
+        }
+
+        /// <summary>
+        /// Establishes an asynchronous connection to the PLC.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        /// <exception cref="InvalidOperationException">Thrown when connection fails.</exception>
+        public async Task ConnectAsync()
+        {
+            if (_isSimulation)
+            {
+                await Task.Delay(500);
+                return;
+            }
+
             try
             {
-                _connectionStatus = "Connecting...";
-                ConnectionStatusChanged?.Invoke(this, _connectionStatus);
-
-                _plc = new Plc(CpuType, IpAddress, Rack, Slot);
-                _plc.Open();
-
-                if (_plc.IsConnected)
-                {
-                    _isSimulationMode = false;
-                    _connectionStatus = $"Connected to PLC at {IpAddress}";
-                    ConnectionStatusChanged?.Invoke(this, _connectionStatus);
-                    return true;
-                }
+                await _plc.OpenAsync();
             }
             catch (Exception ex)
             {
-                _connectionStatus = $"Connection failed: {ex.Message}";
-                ConnectionStatusChanged?.Invoke(this, _connectionStatus);
+                throw new InvalidOperationException($"Failed to connect to PLC: {ex.Message}", ex);
             }
-
-            _isSimulationMode = true;
-            _connectionStatus = "Simulation Mode (PLC not available)";
-            ConnectionStatusChanged?.Invoke(this, _connectionStatus);
-            return false;
         }
 
+        /// <summary>
+        /// Closes the connection to the PLC.
+        /// </summary>
         public void Disconnect()
         {
-            if (_plc?.IsConnected == true)
+            if (!_isSimulation && _plc != null)
             {
                 _plc.Close();
             }
-            _isSimulationMode = true;
-            _connectionStatus = "Disconnected";
-            ConnectionStatusChanged?.Invoke(this, _connectionStatus);
         }
 
-        public ProcessData ReadAllData()
+        /// <summary>
+        /// Starts the industrial process.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public async Task StartProcessAsync()
         {
-            var data = new ProcessData();
-
-            if (!IsConnected) return data;
+            if (_isSimulation)
+            {
+                await Task.Delay(200);
+                _isProcessRunning = true;
+                return;
+            }
 
             try
             {
-                data.TankLevel = Convert.ToDouble(_plc!.Read(DataType.DataBlock, DataBlock, TankLevelOffset, VarType.Real, 1));
-                data.Temperature = Convert.ToDouble(_plc.Read(DataType.DataBlock, DataBlock, TemperatureOffset, VarType.Real, 1));
-                data.Pressure = Convert.ToDouble(_plc.Read(DataType.DataBlock, DataBlock, PressureOffset, VarType.Real, 1));
-                data.MotorSpeed = Convert.ToInt32(_plc.Read(DataType.DataBlock, DataBlock, MotorSpeedOffset, VarType.DInt, 1));
-
-                var runningObj = _plc.Read(DataType.DataBlock, DataBlock, SystemRunningOffset, VarType.Bit, 1, 0);
-                data.IsSystemRunning = runningObj != null && (bool)runningObj;
-
-                DataReceived?.Invoke(this, data);
+                // await _plc.WriteAsync("DB1.DBX0.0", true);
+                _isProcessRunning = true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Log error in real application
+                throw new InvalidOperationException($"Failed to start process: {ex.Message}", ex);
             }
-
-            return data;
         }
 
-        public bool WriteSystemRunning(bool value)
+        /// <summary>
+        /// Stops the industrial process.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        public async Task StopProcessAsync()
         {
-            if (!IsConnected) return false;
+            if (_isSimulation)
+            {
+                await Task.Delay(200);
+                _isProcessRunning = false;
+                return;
+            }
+
             try
             {
-                _plc!.Write(DataType.DataBlock, DataBlock, SystemRunningOffset, value, 0);
-                return true;
+                // await _plc.WriteAsync("DB1.DBX0.0", false);
+                _isProcessRunning = false;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to stop process: {ex.Message}", ex);
+            }
         }
 
-        public bool WriteTankLevel(float value)
+        /// <summary>
+        /// Reads the current status of the machine from the PLC or simulation.
+        /// </summary>
+        /// <returns>A <see cref="MachineStatus"/> object containing current readings.</returns>
+        public async Task<MachineStatus> ReadStatusAsync()
         {
-            if (!IsConnected) return false;
+            if (_isSimulation)
+            {
+                return GetSimulatedStatus();
+            }
+
             try
             {
-                _plc!.Write(DataType.DataBlock, DataBlock, TankLevelOffset, value);
-                return true;
+                // byte[] bytes = await _plc.ReadBytesAsync(DataType.DataBlock, 1, 0, 20);
+                return GetSimulatedStatus();
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                return new MachineStatus 
+                { 
+                    StatusMessage = $"Error: {ex.Message}",
+                    LastUpdated = DateTime.Now
+                };
+            }
         }
 
-        public void Dispose()
+        /// <summary>
+        /// Generates simulated machine status data for testing/demo purposes.
+        /// </summary>
+        /// <returns>A <see cref="MachineStatus"/> object with randomized values.</returns>
+        private MachineStatus GetSimulatedStatus()
         {
-            Disconnect();
-            _plc = null;
+            return new MachineStatus
+            {
+                // Temperature: 60-80 when running, 20-25 when stopped
+                Temperature = _isProcessRunning ? 60 + _random.NextDouble() * 20 : 20 + _random.NextDouble() * 5,
+                
+                // Pressure: 4-6 when running, 0-1 when stopped
+                Pressure = _isProcessRunning ? 4 + _random.NextDouble() * 2 : _random.NextDouble(),
+                
+                IsRunning = _isProcessRunning,
+                StatusMessage = _isProcessRunning ? "System Running" : "System Stopped",
+                LastUpdated = DateTime.Now
+            };
         }
     }
 }

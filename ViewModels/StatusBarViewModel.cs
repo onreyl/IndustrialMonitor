@@ -1,96 +1,51 @@
-using System.Windows.Input;
-using IndustrialMonitor.Core;
 using IndustrialMonitor.Services;
+using System.Windows.Input;
+using System.Threading.Tasks;
 
 namespace IndustrialMonitor.ViewModels
 {
     /// <summary>
-    /// ViewModel for the Status Bar / Footer view.
-    /// Handles PLC connection status and controls.
+    /// ViewModel for the status bar, handling connection status display and global simulation settings.
     /// </summary>
-    public class StatusBarViewModel : ObservableObject
+    public class StatusBarViewModel : BaseViewModel
     {
-        private readonly DataService _dataService;
-
-        #region Properties
-
+        private readonly PlcService _plcService;
+        private string _connectionStatus = "DISCONNECTED";
         private bool _isSimulationMode = true;
-        public bool IsSimulationMode
+
+        public StatusBarViewModel(PlcService plcService)
         {
-            get => _isSimulationMode;
-            set
-            {
-                if (SetProperty(ref _isSimulationMode, value))
-                {
-                    ((RelayCommand)ConnectCommand).RaiseCanExecuteChanged();
-                    ((RelayCommand)DisconnectCommand).RaiseCanExecuteChanged();
-                }
-            }
+            _plcService = plcService;
+            ConnectCommand = new RelayCommand(async _ => await Connect());
+            DisconnectCommand = new RelayCommand(_ => Disconnect());
         }
 
-        private string _connectionStatus = "Disconnected - Simulation Mode";
+        public ICommand ConnectCommand { get; }
+        public ICommand DisconnectCommand { get; }
+
         public string ConnectionStatus
         {
             get => _connectionStatus;
             set => SetProperty(ref _connectionStatus, value);
         }
 
-        public string ModeText => IsSimulationMode ? "SIMULATION" : "PLC";
-
-        #endregion
-
-        #region Commands
-
-        public ICommand ConnectCommand { get; }
-        public ICommand DisconnectCommand { get; }
-
-        #endregion
-
-        public StatusBarViewModel(DataService dataService)
+        public bool IsSimulationMode
         {
-            _dataService = dataService;
-
-            ConnectCommand = new RelayCommand(OnConnect, _ => IsSimulationMode);
-            DisconnectCommand = new RelayCommand(OnDisconnect, _ => !IsSimulationMode);
-
-            // Subscribe to status changes
-            _dataService.StatusChanged += OnStatusChanged;
-
-            // Initialize
-            IsSimulationMode = _dataService.IsSimulationMode;
+            get => _isSimulationMode;
+            set => SetProperty(ref _isSimulationMode, value);
         }
 
-        private void OnConnect(object? parameter)
+        private async Task Connect()
         {
-            ConnectionStatus = "Connecting...";
-            bool connected = _dataService.ConnectPlc();
-            IsSimulationMode = _dataService.IsSimulationMode;
-
-            // Notify other ViewModels
-            Messenger.Default.Send(new PlcConnectionChangedMessage(
-                connected,
-                IsSimulationMode,
-                ConnectionStatus));
+            ConnectionStatus = "CONNECTING...";
+            await _plcService.ConnectAsync();
+            ConnectionStatus = "CONNECTED";
         }
 
-        private void OnDisconnect(object? parameter)
+        private void Disconnect()
         {
-            _dataService.DisconnectPlc();
-            IsSimulationMode = true;
-            ConnectionStatus = "Disconnected - Simulation Mode";
-
-            // Notify other ViewModels
-            Messenger.Default.Send(new PlcConnectionChangedMessage(
-                false,
-                true,
-                ConnectionStatus));
-        }
-
-        private void OnStatusChanged(object? sender, string status)
-        {
-            ConnectionStatus = status;
-            IsSimulationMode = _dataService.IsSimulationMode;
-            OnPropertyChanged(nameof(ModeText));
+            _plcService.Disconnect();
+            ConnectionStatus = "DISCONNECTED";
         }
     }
 }

@@ -1,26 +1,98 @@
-using IndustrialMonitor.Core;
+using IndustrialMonitor.Models;
 using IndustrialMonitor.Services;
+using System.Threading.Tasks;
+using System.Windows.Input;
+using System;
 
 namespace IndustrialMonitor.ViewModels
 {
     /// <summary>
-    /// Main ViewModel - coordinates application-level concerns.
-    /// In this simple app, it mainly serves as the root DataContext.
-    /// In larger apps, it would handle navigation, dialogs, etc.
+    /// The main view model for the application, handling the primary machine status and connection logic.
     /// </summary>
-    public class MainViewModel : ObservableObject
+    public class MainViewModel : BaseViewModel
     {
-        private readonly DataService _dataService;
+        private readonly IPlcService _plcService;
+        private MachineStatus _status;
+        private readonly System.Timers.Timer _timer;
+        private string _connectionStatus = "Disconnected";
 
-        public MainViewModel(DataService dataService)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="MainViewModel"/> class.
+        /// </summary>
+        /// <param name="plcService">The PLC service for communication.</param>
+        public MainViewModel(IPlcService plcService)
         {
-            _dataService = dataService;
+            _plcService = plcService;
+            Status = new MachineStatus();
+
+            ConnectCommand = new RelayCommand(async _ => await Connect());
+            DisconnectCommand = new RelayCommand(_ => Disconnect());
+
+            // Set up polling timer (1 second interval)
+            _timer = new System.Timers.Timer(1000);
+            _timer.Elapsed += async (s, e) => await UpdateStatus();
         }
 
-        // In a more complex app, you might have:
-        // - Navigation commands
-        // - Application-wide settings
-        // - Dialog management
-        // - Logging coordination
+        /// <summary>
+        /// Gets or sets the current machine status.
+        /// </summary>
+        public MachineStatus Status
+        {
+            get => _status;
+            set => SetProperty(ref _status, value);
+        }
+
+        /// <summary>
+        /// Gets or sets the connection status message.
+        /// </summary>
+        public string ConnectionStatus
+        {
+            get => _connectionStatus;
+            set => SetProperty(ref _connectionStatus, value);
+        }
+
+        public ICommand ConnectCommand { get; }
+        public ICommand DisconnectCommand { get; }
+
+        private async Task Connect()
+        {
+            try
+            {
+                ConnectionStatus = "Connecting...";
+                await _plcService.ConnectAsync();
+                ConnectionStatus = "Connected";
+                _timer.Start();
+            }
+            catch (Exception ex)
+            {
+                ConnectionStatus = $"Error: {ex.Message}";
+            }
+        }
+
+        private void Disconnect()
+        {
+            _timer.Stop();
+            _plcService.Disconnect();
+            ConnectionStatus = "Disconnected";
+        }
+
+        private async Task UpdateStatus()
+        {
+            try
+            {
+                var newStatus = await _plcService.ReadStatusAsync();
+                Status = newStatus;
+
+                var app = System.Windows.Application.Current;
+                if (app?.Resources["Locator"] is ViewModelLocator locator)
+                {
+                    locator.ControlPanelViewModel.UpdateFromStatus(newStatus);
+                }
+            }
+            catch (Exception ex)
+            {
+                ConnectionStatus = $"Update Error: {ex.Message}";
+            }
+        }
     }
 }
