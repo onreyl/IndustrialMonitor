@@ -12,7 +12,7 @@ namespace IndustrialMonitor.Services
     /// </summary>
     public class PlcService : IPlcService
     {
-        private Plc _plc;
+        private Plc? _plc;
         private readonly bool _isSimulation;
         private readonly Random _random = new Random();
         private bool _isProcessRunning = false;
@@ -50,7 +50,10 @@ namespace IndustrialMonitor.Services
 
             try
             {
-                await _plc.OpenAsync();
+                if (_plc != null)
+                {
+                    await _plc.OpenAsync();
+                }
             }
             catch (Exception ex)
             {

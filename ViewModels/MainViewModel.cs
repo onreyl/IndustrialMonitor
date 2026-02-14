@@ -12,7 +12,7 @@ namespace IndustrialMonitor.ViewModels
     public class MainViewModel : BaseViewModel
     {
         private readonly IPlcService _plcService;
-        private MachineStatus _status;
+        private MachineStatus _status = new MachineStatus();
         private readonly System.Timers.Timer _timer;
         private string _connectionStatus = "Disconnected";
 
@@ -23,7 +23,6 @@ namespace IndustrialMonitor.ViewModels
         public MainViewModel(IPlcService plcService)
         {
             _plcService = plcService;
-            Status = new MachineStatus();
 
             ConnectCommand = new RelayCommand(async _ => await Connect());
             DisconnectCommand = new RelayCommand(_ => Disconnect());
